@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/data/
+*.db
+node_modules/
+frontend/dist/
+.env
+.DS_Store
+*.log
+docs/benchmark-results/*.json
+!docs/benchmark-results/.gitkeep

@@ -1,0 +1,197 @@
+# Full stack — one command: docker compose up -d --build
+# UI: http://localhost:8080  |  API: http://localhost:8000/docs  |  RTSP: rtsp://localhost:8554/cam1
+
+name: camstream
+
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.9.3
+    container_name: camstream-mediamtx
+    ports:
+      - "8554:8554"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    restart: unless-stopped
+
+  rtsp-pub-1:
+    image: jrottenberg/ffmpeg:4.4-alpine
+    depends_on:
+      - mediamtx
+    volumes:
+      - ./b1_streaming:/videos:ro
+    entrypoint: []
+    command:
+      - ffmpeg
+      - -re
+      - -stream_loop
+      - "-1"
+      - -i
+      - /videos/far.mp4
+      - -c:v
+      - libx264
+      - -preset
+      - ultrafast
+      - -tune
+      - zerolatency
+      - -g
+      - "30"
+      - -an
+      - -f
+      - rtsp
+      - -rtsp_transport
+      - tcp
+      - rtsp://mediamtx:8554/cam1
+    restart: unless-stopped
+
+  rtsp-pub-2:
+    image: jrottenberg/ffmpeg:4.4-alpine
+    depends_on:
+      - mediamtx
+    volumes:
+      - ./b1_streaming:/videos:ro
+    entrypoint: []
+    command:
+      - ffmpeg
+      - -re
+      - -stream_loop
+      - "-1"
+      - -i
+      - /videos/far.mp4
+      - -c:v
+      - libx264
+      - -preset
+      - ultrafast
+      - -tune
+      - zerolatency
+      - -g
+      - "30"
+      - -an
+      - -f
+      - rtsp
+      - -rtsp_transport
+      - tcp
+      - rtsp://mediamtx:8554/cam2
+    restart: unless-stopped
+
+  rtsp-pub-3:
+    image: jrottenberg/ffmpeg:4.4-alpine
+    depends_on:
+      - mediamtx
+    volumes:
+      - ./b1_streaming:/videos:ro
+    entrypoint: []
+    command:
+      - ffmpeg
+      - -re
+      - -stream_loop
+      - "-1"
+      - -i
+      - /videos/far.mp4
+      - -c:v
+      - libx264
+      - -preset
+      - ultrafast
+      - -tune
+      - zerolatency
+      - -g
+      - "30"
+      - -an
+      - -f
+      - rtsp
+      - -rtsp_transport
+      - tcp
+      - rtsp://mediamtx:8554/cam3
+    restart: unless-stopped
+
+  rtsp-pub-4:
+    image: jrottenberg/ffmpeg:4.4-alpine
+    depends_on:
+      - mediamtx
+    volumes:
+      - ./b1_streaming:/videos:ro
+    entrypoint: []
+    command:
+      - ffmpeg
+      - -re
+      - -stream_loop
+      - "-1"
+      - -i
+      - /videos/far.mp4
+      - -c:v
+      - libx264
+      - -preset
+      - ultrafast
+      - -tune
+      - zerolatency
+      - -g
+      - "30"
+      - -an
+      - -f
+      - rtsp
+      - -rtsp_transport
+      - tcp
+      - rtsp://mediamtx:8554/cam4
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: camstream-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - camstream-data:/app/data
+    environment:
+      CAMSTREAM_DATABASE_URL: sqlite:////app/data/camstream.db
+      CAMSTREAM_CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      CAMSTREAM_MAX_CHANNELS: "32"
+      CAMSTREAM_FRAME_TIMEOUT_SEC: "5"
+    depends_on:
+      - mediamtx
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: camstream-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # One-shot: register 4 cameras (RTSP host = mediamtx on Docker network)
+  seed:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      backend:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "Seeding demo cameras..."
+        sleep 2
+        i=1
+        while [ "$$i" -le 4 ]; do
+          slot=$$((i - 1))
+          curl -sf -X POST http://backend:8000/api/cameras \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"Demo Cam $$i\",\"rtsp_url\":\"rtsp://mediamtx:8554/cam$$i\",\"resolution_width\":640,\"resolution_height\":360,\"target_fps\":10,\"enabled\":true,\"grid_slot\":$$slot}" \
+            || echo "Camera $$i may already exist"
+          i=$$((i + 1))
+        done
+        echo "Seed done."
+    restart: "no"
+
+volumes:
+  camstream-data:

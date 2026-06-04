@@ -1,0 +1,37 @@
+# MediaMTX RTSP server — paths match docker-compose publishers (cam1..cam32)
+logLevel: info
+rtsp: yes
+rtspAddress: :8554
+paths:
+  cam1:
+  cam2:
+  cam3:
+  cam4:
+  cam5:
+  cam6:
+  cam7:
+  cam8:
+  cam9:
+  cam10:
+  cam11:
+  cam12:
+  cam13:
+  cam14:
+  cam15:
+  cam16:
+  cam17:
+  cam18:
+  cam19:
+  cam20:
+  cam21:
+  cam22:
+  cam23:
+  cam24:
+  cam25:
+  cam26:
+  cam27:
+  cam28:
+  cam29:
+  cam30:
+  cam31:
+  cam32:
