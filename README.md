@@ -1,123 +1,232 @@
 # CamStream Manager (ORBRO B1)
 
-Hệ thống quản lý camera và streaming video: RTSP ingest, giám sát đa kênh trên web, CRUD camera, trạng thái/FPS/latency, metrics CPU/RAM/GPU. Thiết kế mở rộng tới **32 kênh**.
-
-## Yêu cầu
-
-| Thành phần | Phiên bản |
-|------------|-----------|
-| Docker Desktop | Chạy engine (Linux containers) |
-| Python | 3.11+ |
-| Node.js | 18+ |
-| Video mẫu | `b1_streaming/far.mp4` (từ `Video_BE.zip`) |
-
-## Chạy bằng Docker (khuyến nghị — một lệnh)
-
-**Yêu cầu:** Docker Desktop đang chạy, file `b1_streaming/far.mp4` có sẵn.
-
-```powershell
-cd E:\Project\camstream-manager
-docker compose up -d --build
-```
-
-Đợi ~30–60 giây (build lần đầu lâu hơn). Service `seed` tự đăng ký 4 camera.
-
-| Dịch vụ | URL |
-|---------|-----|
-| **Dashboard** | http://localhost:8080 |
-| API Swagger | http://localhost:8000/docs |
-| RTSP (VLC) | `rtsp://127.0.0.1:8554/cam1` … `cam4` |
-
-```powershell
-docker compose ps          # trạng thái container
-docker compose logs -f backend frontend
-docker compose down          # dừng toàn bộ
-```
-
-Hoặc: `.\scripts\docker-up.ps1 -Build`
-
-> **Lưu ý:** Camera trong DB dùng URL `rtsp://mediamtx:8554/camN` (mạng Docker). Backend container đọc RTSP qua hostname `mediamtx`.
+Multi-channel camera management and video monitoring for the ORBRO B1 assignment. The stack simulates IP cameras with **local RTSP** (MediaMTX + FFmpeg), ingests streams on the server (OpenCV), and serves a React admin dashboard with live preview, per-channel FPS control, status monitoring, auto-reconnect events, and system metrics (CPU/RAM/GPU). Designed to scale up to **32 channels**.
 
 ---
 
-## Chạy local (dev — không Docker cho app)
+## Prerequisites
 
-### Cài đặt
+| Component | Version / notes |
+|-----------|-----------------|
+| **Docker Desktop** | Required for the recommended one-command run (Linux containers enabled) |
+| **Python** | 3.11+ (local backend dev only) |
+| **Node.js** | 18+ (local frontend dev only) |
+| **Sample video** | `b1_streaming/far.mp4` from company `Video_BE.zip` |
 
-```powershell
-cd backend && python -m venv .venv && .\.venv\Scripts\pip install -r requirements.txt
-cd ..\frontend && npm install
+Place the sample file before starting:
+
+```text
+camstream-manager/
+  b1_streaming/
+    far.mp4    ← required for RTSP publishers
 ```
 
-### RTSP only
+---
+
+## Quick start (Docker — recommended)
+
+Graders should use this path to reproduce the full system.
+
+### 1. Clone and prepare video
+
+```powershell
+cd camstream-manager
+# Ensure b1_streaming/far.mp4 exists (see above)
+```
+
+### 2. Start the stack
+
+```powershell
+docker compose up -d --build
+```
+
+First build may take several minutes. Wait **30–60 seconds** after containers are up for the backend health check, seed job, and stream workers to connect.
+
+Alternative helper script:
+
+```powershell
+.\scripts\docker-up.ps1 -Build
+```
+
+### 3. Open the dashboard
+
+| Service | URL |
+|---------|-----|
+| **Dashboard (UI)** | http://localhost:8080 |
+| **API (Swagger)** | http://localhost:8000/docs |
+| **RTSP (VLC / ffplay on host)** | `rtsp://127.0.0.1:8554/cam1` … `cam4` |
+
+The one-shot **`seed`** service registers four demo cameras automatically. Each camera uses:
+
+`rtsp://mediamtx:8554/camN` (Docker internal hostname — **not** `127.0.0.1` inside the backend container).
+
+### 4. Useful commands
+
+```powershell
+docker compose ps
+docker compose logs -f backend frontend
+docker compose down
+```
+
+---
+
+## Verify the installation
+
+Use this checklist after `docker compose up -d --build`:
+
+| Check | How |
+|-------|-----|
+| **4 live videos** | Tab **Video grid** → layout **4** → four cells show moving video |
+| **Per-cell FPS** | Change FPS dropdown on a cell → stream rate updates without full reconnect |
+| **Status table** | Tab **Status** → connected / FPS / latency / uptime / reconnects |
+| **Events log** | Tab **Events** → entries after reconnect tests |
+| **System metrics** | Header bar → CPU, RAM, GPU (GPU may show N/A without NVIDIA) |
+| **CRUD cameras** | Tab **Cameras** or Swagger `POST/PUT/DELETE /api/cameras` |
+
+### Optional: reconnect demo
+
+```powershell
+docker compose stop rtsp-pub-1
+# Observe grid/status → reconnecting + Events log
+docker compose start rtsp-pub-1
+```
+
+---
+
+## Adding cameras manually
+
+When creating a camera in the UI or API:
+
+| Environment | RTSP URL example |
+|-------------|------------------|
+| **Backend in Docker** (default) | `rtsp://mediamtx:8554/cam1` … `cam4` |
+| **Backend on host**, RTSP in Docker | `rtsp://127.0.0.1:8554/cam1` … `cam4` |
+
+Only **`cam1`–`cam4`** have active FFmpeg publishers in `docker-compose.yml`. Paths like `cam5` will fail until you add another publisher.
+
+Re-seed demo cameras (local dev / if seed was skipped):
+
+```powershell
+.\scripts\seed-demo-cameras.ps1
+```
+
+---
+
+## Local development (without Docker for app)
+
+### Install dependencies
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+
+cd ..\frontend
+npm install
+```
+
+### Start RTSP only (Docker)
 
 ```powershell
 docker compose up -d mediamtx rtsp-pub-1 rtsp-pub-2 rtsp-pub-3 rtsp-pub-4
 ```
 
-### Backend + Frontend
+### Run backend and frontend
 
 ```powershell
-# terminal 1
+# Terminal 1 — backend
 cd backend
 .\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload --port 8000
 
-# terminal 2
+# Terminal 2 — frontend
 cd frontend
 npm run dev
 ```
 
-UI dev: http://localhost:5173 — seed: `.\scripts\seed-demo-cameras.ps1` (RTSP URL `mediamtx` nếu backend trong Docker; `127.0.0.1` nếu backend trên host và RTSP port map 8554)
+| Dev UI | http://localhost:5173 |
+| API | http://localhost:8000/docs |
 
-## Đo hiệu năng (cho báo cáo)
+Use `rtsp://127.0.0.1:8554/camN` in camera URLs when the backend runs on the host and port **8554** is published by MediaMTX.
+
+---
+
+## Performance benchmark (for report)
+
+With the stack running and four streams active:
 
 ```powershell
-# Hệ thống + 4 camera đang chạy
 .\scripts\benchmark-metrics.ps1 -Channels 4 -DurationSec 30 -TargetFps 10
 ```
 
-Kết quả JSON: `docs/benchmark-results/` → copy vào `docs/REPORT.md`.
+Output JSON is written under `docs/benchmark-results/`. Copy summarized numbers into `docs/REPORT.md`.
 
-## Xác nhận nhanh
+---
 
-| Kiểm tra | Cách |
-|----------|------|
-| 4 video | Tab Video grid, layout 4 |
-| FPS từng ô | Dropdown → hot-reload |
-| Reconnect | Tắt 1 publisher Docker → Events/Status |
-| Metrics | Header CPU/RAM/GPU |
-| CRUD | Tab Cameras hoặc Swagger |
+## Features (B1 scope)
 
-## Cấu trúc repo
+- **Camera management** — CRUD, enable/disable, grid slot, target FPS
+- **RTSP ingestion** — OpenCV pull, server-side FPS throttle, JPEG over WebSocket
+- **Video grid** — layouts 4 / 8 / 16 / 32
+- **FPS control** — hot reload per channel without tearing down RTSP
+- **Stream status** — connected / reconnecting / disconnected, FPS, latency, uptime
+- **Auto reconnect** — exponential backoff, fault events API
+- **System resources** — CPU, RAM, GPU (NVIDIA via `nvidia-smi` / `pynvml` fallback)
+- **Admin UI** — grid, cameras, status table, events log, metrics sparklines
 
-```
+---
+
+## Project structure
+
+```text
 camstream-manager/
-├── docker-compose.yml      # MediaMTX + FFmpeg publishers
-├── b1_streaming/far.mp4
-├── backend/app/              # FastAPI, ingest, metrics
-├── frontend/src/             # React admin + grid
+├── docker-compose.yml       # MediaMTX, FFmpeg publishers, backend, frontend, seed
+├── mediamtx.yml             # RTSP paths cam1–cam32
+├── b1_streaming/far.mp4     # Sample video (not in git — add locally)
+├── backend/app/             # FastAPI, StreamManager, metrics, events
+├── frontend/src/            # React admin + grid + WebSocket cells
 ├── scripts/
+│   ├── docker-up.ps1
 │   ├── seed-demo-cameras.ps1
 │   └── benchmark-metrics.ps1
 ├── docs/
-│   ├── REPORT.md             # Báo cáo nộp (≤2 trang A4 phần chính)
+│   ├── REPORT.md            # Submission report (≤2 pages main body)
 │   ├── ARCHITECTURE.md
 │   ├── SUBMISSION_CHECKLIST.md
-│   └── demo/                 # screenshots + video
-├── ai/                       # AI_USAGE_LOG, AI_RETROSPECTIVE
+│   └── demo/                # screenshots/ + video/ for submission
+├── ai/
+│   ├── AI_USAGE_LOG.md       # index → docs/ai-log.md
+│   └── AI_RETROSPECTIVE.md
 └── REFERENCES.md
 ```
 
-## API
+---
 
-- `POST/GET/PUT/DELETE /api/cameras`
-- `GET /api/cameras/{id}/status`
-- `GET /api/metrics/system` · `GET /api/metrics/history`
-- `GET /api/events?camera_id=1&limit=20`
-- `WS /ws/streams/{camera_id}`
+## API overview
 
-## Cấu hình (`backend/.env`)
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/cameras` | Create camera |
+| `GET` | `/api/cameras` | List cameras |
+| `GET` | `/api/cameras/{id}` | Get camera |
+| `PUT` | `/api/cameras/{id}` | Update camera |
+| `DELETE` | `/api/cameras/{id}` | Delete camera |
+| `GET` | `/api/cameras/{id}/status` | Single channel status |
+| `GET` | `/api/cameras/status/all` | All channel statuses (status page) |
+| `GET` | `/api/metrics/system` | Current CPU/RAM/GPU |
+| `GET` | `/api/metrics/history` | Metrics history for sparklines |
+| `GET` | `/api/events` | Fault / reconnect event log |
+| `WS` | `/ws/streams/{camera_id}` | JPEG frames + JSON meta |
+
+Interactive docs: http://localhost:8000/docs
+
+---
+
+## Configuration
+
+Environment variables use the prefix **`CAMSTREAM_`** (avoids clashes with host tools such as PostgreSQL `DATABASE_URL`).
+
+Example `backend/.env`:
 
 ```env
 CAMSTREAM_DATABASE_URL=sqlite:///./data/camstream.db
@@ -125,30 +234,56 @@ CAMSTREAM_MAX_CHANNELS=32
 CAMSTREAM_FRAME_TIMEOUT_SEC=5
 CAMSTREAM_RECONNECT_BASE_SEC=1
 CAMSTREAM_RECONNECT_MAX_SEC=30
+CAMSTREAM_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-## Tài liệu nộp bài ORBRO
+Docker Compose sets these for the backend container automatically.
 
-| Tài liệu | Đường dẫn |
-|----------|-----------|
-| README | `README.md` (file này) |
-| Báo cáo + đo lường | `docs/REPORT.md` |
-| Kiến trúc chi tiết | `docs/ARCHITECTURE.md` |
-| Checklist nộp | `docs/SUBMISSION_CHECKLIST.md` |
-| Screenshot / video | `docs/demo/README.md` |
-| AI log | `ai/AI_USAGE_LOG.md` |
-| AI retrospective | `ai/AI_RETROSPECTIVE.md` |
-| References | `REFERENCES.md` |
+---
+
+## Submission documents (ORBRO)
+
+| Document | Path |
+|----------|------|
+| **README (this file)** | `README.md` |
+| Report + measurements | `docs/REPORT.md` |
+| Architecture detail | `docs/ARCHITECTURE.md` |
+| Submission checklist | `docs/SUBMISSION_CHECKLIST.md` |
+| Screenshots / demo video | `docs/demo/README.md` |
+| AI usage log | `docs/ai-log.md` (index: `ai/AI_USAGE_LOG.md`) |
+| AI retrospective | `docs/ai-retrospective.md` (index: `ai/AI_RETROSPECTIVE.md`) |
+| References | `docs/references.md` (index: `REFERENCES.md`) |
+
+---
 
 ## Troubleshooting
 
-| Vấn đề | Gợi ý |
-|--------|--------|
-| `docker compose` lỗi pipe | Bật Docker Desktop |
-| Backend lỗi PostgreSQL | Dùng prefix `CAMSTREAM_` (xem `.env`) |
-| Grid không video | RTSP chạy? Đã seed camera? Backend port 8000? |
-| GPU N/A | Bình thường nếu không có NVIDIA / `nvidia-smi` |
+| Issue | What to try |
+|-------|-------------|
+| `docker compose` pipe / engine error | Start **Docker Desktop** and wait until it is running |
+| Backend fails on DB URL | Use `CAMSTREAM_` prefix; see `backend/.env` |
+| Grid shows black / “Failed to open RTSP stream” | Confirm `far.mp4` exists; RTSP publishers running; camera URL uses **`mediamtx`** inside Docker, not `127.0.0.1` |
+| New camera on `cam5` fails | Only `cam1`–`cam4` are published by default |
+| Status table shows only dashes | Rebuild after README fix: `docker compose up -d --build backend frontend` |
+| GPU shows N/A | Normal without NVIDIA GPU or `nvidia-smi` in the backend image |
+| Seed skipped / empty camera list | Run `.\scripts\seed-demo-cameras.ps1` or `POST /api/cameras` via Swagger |
 
-## English summary
+---
 
-Local RTSP is simulated by looping `far.mp4` via Docker (MediaMTX + FFmpeg). FastAPI ingests RTSP with per-channel FPS throttling and health monitoring; React provides a multi-layout grid, admin pages, and system metrics (psutil + NVIDIA tools), designed for up to 32 channels.
+## Architecture (short)
+
+```text
+far.mp4 → FFmpeg (×4) → MediaMTX :8554/cam1..4
+                              ↓ RTSP
+                    FastAPI StreamWorker (per camera)
+                              ↓ WebSocket JPEG
+                    React dashboard (grid + admin)
+```
+
+Full diagrams and design notes: `docs/ARCHITECTURE.md`.
+
+---
+
+## License / assignment
+
+Built for the ORBRO technical assignment **B1 — Camera management & multi-channel streaming**. For questions about submission format, refer to the assignment brief and `docs/SUBMISSION_CHECKLIST.md`.

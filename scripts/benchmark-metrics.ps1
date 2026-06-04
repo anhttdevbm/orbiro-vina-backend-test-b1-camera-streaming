@@ -10,7 +10,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$outDir = Join-Path $PSScriptRoot ".." "docs" "benchmark-results"
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$outDir = Join-Path $repoRoot "docs\benchmark-results"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $outFile = Join-Path $outDir "benchmark-$Channels-ch-$stamp.json"

@@ -9,9 +9,9 @@
 - [ ] **Code** — repo đầy đủ hoặc zip
 - [ ] **Ảnh dashboard** — `docs/demo/screenshots/` (xem `docs/demo/README.md`)
 - [ ] **Video demo 4 luồng** — `docs/demo/video/` (30–90 giây, thấy 4 video + metrics)
-- [ ] **AI Usage Log** — `ai/AI_USAGE_LOG.md` (≥5 hội thoại)
-- [ ] **AI Retrospective** — `ai/AI_RETROSPECTIVE.md` (300–500 từ)
-- [ ] **References** — `REFERENCES.md` (URL + ngày truy cập)
+- [ ] **AI Usage Log** — `docs/ai-log.md` (≥5 hội thoại, có My Verification / Modification)
+- [ ] **AI Retrospective** — `docs/ai-retrospective.md` (300–500 words, English)
+- [ ] **References** — `docs/references.md` (URL + access date)
 
 ## Trước khi quay video / chụp ảnh
 
